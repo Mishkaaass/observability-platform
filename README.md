@@ -1,104 +1,174 @@
-# DevSecOps Starter Template
+# Observability Platform — Metrics and Alerting Lab
 
-A reusable, self-contained Python + Docker engineering baseline, derived from
-the reviewed [OpsBoard CI/CD platform](https://github.com/Mishkaaass/ci-cd-lab).
-The sample is a deliberately small stateless FastAPI service. Replace it with
-your project and keep the safety gates; do not claim the sample tests prove
-a new application's behavior.
+**Project 3 · Phase 1 foundation.** A hands-on SRE and DevSecOps lab built on the
+[DevSecOps Starter Template](https://github.com/Mishkaaass/devops-starter-template).
+Measure a real FastAPI workload, inspect latency and failures, observe an alert
+when the service stops, then confirm recovery. No real cloud, external alert
+receiver, Kubernetes cluster or production account is needed.
 
-## Create a new project
+*Developed by Moshe Bogo*
 
-After the template has been verified and enabled in GitHub, select **Use this
-template → Create a new repository**, or use GitHub CLI:
+[![CI/CD](https://github.com/Mishkaaass/observability-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Mishkaaass/observability-platform/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/Mishkaaass/observability-platform)](LICENSE)
 
-```bash
-gh repo create observability-platform --template YOUR_GITHUB_USER/devops-starter-template --public --clone
-cd observability-platform
-```
+**Status:** first implementation; local Python tests and source checks are
+separate from the real Docker/GitHub integration evidence. This is not a final
+release. Loki, Alloy, OpenTelemetry and Tempo are planned next, not installed yet.
 
-Choose `--private` instead if the project must remain private (GitHub plan
-restrictions may affect rulesets). GitHub template copies contain the CI/CD
-files but not Actions variables, rulesets, package visibility, releases or
-previous CI history. Do not copy tokens or environment credentials.
-
-In the new clean main checkout, run `python3 scripts/github_setup.py` for a
-read-only preflight, then `python3 scripts/github_setup.py --apply` to run CI
-and configure strict branch protection **only after all seven gates pass**.
-The script requires your own personal GitHub repository and admin access.
-It refuses to modify the two existing portfolio labs. Use a PR for subsequent
-changes. For image publishing, after adapting and validating the real app,
-run `python3 scripts/github_setup.py --apply --publish-image` from reviewed
-main. This enables `PUBLISH_IMAGE=true` and verifies CD. No custom token is
-needed in the repository; the workflow uses the scoped GitHub Actions token.
-
-## Run locally — choose your OS
-
-| System | Native Python path | Container path |
-| --- | --- | --- |
-| Linux | [Linux](docs/linux.md) | Docker Engine + Compose v2 |
-| Windows | [Windows PowerShell / WSL 2](docs/windows.md) | Docker Desktop |
-| macOS | [Intel / Apple silicon](docs/macos.md) | Docker Desktop |
-
-The sample is not an internet-facing service. Browse only
-http://127.0.0.1:18000/. Native Python needs a project-local venv and pinned
-packages; Docker builds an isolated image. No global pip, credentials,
-Kubernetes cluster or AWS resources are needed. Linux is the CI reference;
-Windows and macOS instructions are portable candidates, not runtime evidence.
-
-## Delivery lifecycle
+## What happens in this lab?
 
 ```mermaid
 flowchart LR
-  PR[Pull request] --> CI[Seven mandatory CI gates]
-  CI --> Main[Protected main]
-  Main --> CI2[Repeat CI on main]
-  CI2 --> Opt{Publishing enabled?}
-  Opt -->|No| Stop[CI only]
-  Opt -->|Yes| Candidate[GHCR candidate with SBOM and provenance]
-  Candidate --> Verify[Scan and smoke test exact digest + ZAP]
-  Verify -->|Pass and current main| Release[Verified SHA tag and digest]
+  U[Bounded local traffic] --> A[FastAPI workload]
+  A --> M[Request counters and latency histograms]
+  A --> L[Structured stdout logs]
+  P[Prometheus] -->|scrapes /metrics| A
+  P --> R[Alert rules]
+  R --> AM[Alertmanager]
+  G[Grafana provisioned dashboards] -->|PromQL| P
+  U -->|observe| G
+  U -->|verify alert state| AM
 ```
 
-| Required gate | Purpose |
+| Component | Why it exists |
 | --- | --- |
-| Code quality | Ruff lint/format and Bandit static security |
-| Python tests | Unit, API, setup policy and safety regression tests |
-| Dependency security | pip-audit runtime dependency tree |
-| Secret security | Gitleaks Git history / event-range scanning |
-| Container security | Trivy config/image scans and disposable container smoke |
-| API and browser security | Real HTTP tests and Chromium checks |
-| Isolated API attack scan | ZAP against a fresh internal-network container, coverage required |
+| FastAPI | A real small workload to monitor, not fabricated telemetry |
+| Prometheus | Scrapes counters and histograms every 5 seconds |
+| Grafana | Visualizes the RED signals: rate, errors, duration |
+| Alertmanager | Receives and tracks Prometheus alerts locally |
+| SLI | Successful workload request fraction over a short teaching window |
+| DevSecOps | Seven inherited quality/security gates, plus monitoring integration |
 
-`Publish Docker image` is a post-merge job, not a PR gate. It requires all
-seven successful jobs, a main push or manual main dispatch, explicit opt-in,
-protected/current main, a verified exact published image digest, SBOM and
-provenance. The reference implementation does not set a mutable `latest`
-tag or deploy to any environment. A failed candidate is not a verified
-release. All actions use reviewed commit SHAs. Dependabot proposes updates.
+## Start locally
 
-## Customize for the real project
+Use a trusted **local** Docker engine and Compose v2, Git, a browser, and Python
+3.11+ for the stdlib traffic generator. Linux is the CI reference. Windows and
+macOS use Docker Desktop Linux containers. Intel and Apple silicon routes are
+documented, but not independently certified on every CPU/OS combination.
 
-| File | What to change |
+| OS | Setup |
 | --- | --- |
-| `app/` | Real application, health/readiness and version endpoints |
-| `tests/` | Replace sample assertions with real functional/security/integration tests |
-| `scripts/test-image.py` and `scripts/zap-coverage-hook.py` | Real API contract, access model and scan coverage; remove inapplicable CSRF exception |
-| `Dockerfile`, `compose.yaml` | Actual services, verified image digests, least privilege and local isolation |
-| `.github/workflows/ci.yml` | Extend the gates for real integrations; keep required names or migrate rules carefully |
-| `requirements*.txt` | Reviewed compatible packages for the project |
-| `README.md`, `docs/`, `SECURITY.md` | Actual architecture, run instructions, limitations and security model |
+| Linux | [Linux](docs/linux.md) |
+| Windows | [Windows / WSL 2](docs/windows.md) |
+| macOS | [macOS / Docker Desktop](docs/macos.md) |
 
-For Observability, add metrics, logs, traces, alert delivery, incident drills
-and tests that prove each integration. For Kafka, add broker, producer,
-consumer, failure and idempotency tests. Don't deploy the sample as the real
-project. IaC-only projects need their own Terraform-specific gates; do not
-blindly replace them with this Python pipeline.
+After cloning the repository, or extracting the source kit, open a terminal in
+its root. Check that the selected Docker context is your own local lab engine.
+Stop any previous instance of this same lab occupying its ports; do not kill
+unknown processes or change unrelated containers.
 
-## Validation and safety
+```bash
+docker context show
+docker compose version
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+```
 
-Local unit tests and CI are separate evidence. GitHub's actual results are
-required before claiming the template is operational. See [SECURITY.md](SECURITY.md)
-for risk acceptance and boundaries. Stable releases should be created against
-reviewed commit IDs; never overwrite existing release tags.
+| Local URL | What to inspect |
+| --- | --- |
+| http://127.0.0.1:18000/ | Workload and `/health`, `/ready`, `/metrics` |
+| http://127.0.0.1:13000/d/observability-overview | Provisioned Grafana dashboard |
+| http://127.0.0.1:19090/targets | Prometheus workload target |
+| http://127.0.0.1:19093/ | Alertmanager firing alerts |
 
-MIT licensed — see [LICENSE](LICENSE).
+Grafana is intentionally configured as a **local anonymous Viewer** with no
+initial admin account and login disabled, not `admin/admin`. Prometheus and
+Alertmanager are also local teaching UIs without authentication. Do not expose
+these ports to a network or store real production data here. If provisioning
+fails, inspect `docker compose logs grafana`; do not enable a default admin
+password or change security settings just to make a test pass.
+
+## Drill 1 — learn real measurements
+
+Run one command at a time and watch Grafana after each scrape:
+
+```bash
+python3 scripts/generate_traffic.py healthy --count 30
+python3 scripts/generate_traffic.py slow --count 30
+python3 scripts/generate_traffic.py failure --count 60
+```
+
+Healthy returns HTTP 200, slow returns HTTP 200 after a fixed 350 ms wait, and
+failure returns HTTP 503. These are bounded, stateless local exercises, enabled
+only in the lab Compose service (`LAB_INCIDENTS=1`). They are disabled in the
+normal published app image. Unknown paths, health probes and scrapes do not
+inflate metric cardinality or workload totals. Request payloads and query
+strings are not recorded in metrics or the structured workload logs.
+
+Try these PromQL queries in Prometheus:
+
+```promql
+sum(rate(obs_http_requests_total[1m]))
+100 * sum(rate(obs_http_requests_total{status="5xx"}[1m])) / sum(rate(obs_http_requests_total[1m]))
+histogram_quantile(0.95, sum by (le) (rate(obs_http_request_duration_seconds_bucket[1m])))
+```
+
+A high error rate can trigger `HighErrorRate` when the threshold and hold time
+are met. No traffic means no request availability evidence. `up=1` means the
+scrape works, not that every request is successful.
+
+## Drill 2 — detect and recover from a real service outage
+
+**Only on your dedicated lab checkout**, after confirming `docker compose ps`
+shows the intended workload, use these explicit commands:
+
+```bash
+python3 scripts/integration-observability.py healthy
+docker compose stop starter
+python3 scripts/integration-observability.py down
+```
+
+The last command verifies `up=0` and an active `WorkloadDown` alert received by
+Alertmanager. Then restore the same container:
+
+```bash
+docker compose start starter
+python3 scripts/integration-observability.py recovered
+```
+
+The verifier polls actual local APIs for recovery and alert clearance. The
+receiver is deliberately local-only, with no external notification sink. If a
+timeout occurs, inspect the logs rather than asserting that the test succeeded.
+
+Safe shutdown: `docker compose stop` preserves the project's containers and
+volumes. Do not use `down -v` on a reviewer's machine. The CI-only script creates
+and cleans up a separate uniquely named disposable project.
+
+## CI/CD and safety gates
+
+```mermaid
+flowchart LR
+  PR[Pull request] --> CI[Seven required gates]
+  CI --> M[Protected main]
+  M --> CI2[CI on main]
+  CI2 --> C[Opt-in candidate publication]
+  C --> V[Exact digest scan and isolated app checks]
+  V --> R[Verified SHA tag and SBOM provenance]
+```
+
+The inherited pipeline keeps the exact seven gate names (code quality, Python
+unit tests, dependency audit, secret scan, container security, browser/API
+security and isolated API attack scan). The container gate additionally scans
+all three pinned monitoring images, checks Prometheus rules and Alertmanager
+config, starts a disposable stack, proves real scrape and dashboard behavior,
+checks metric ingestion, stops the workload, verifies a delivered alert and
+restores the workload. The image-publishing job remains opt-in and requires
+protected current main and successful CI. It publishes the workload image,
+not a deployment of the monitoring stack. No CI step uses a cloud credential.
+
+To protect a new clean main, use `python3 scripts/github_setup.py --apply`.
+After the real application checks pass on reviewed main, use
+`python3 scripts/github_setup.py --apply --publish-image` to enable verified
+GHCR publishing. GitHub admin access is required. Do not enable publishing
+while the project is unprotected or before the real tests pass.
+
+## Scope and next phases
+
+- Phase 1: metrics, dashboards, local alerts, structured stdout, outage drill.
+- Phase 2: centralized logs with Loki and Alloy (without privileged Docker socket).
+- Phase 3: OpenTelemetry and Tempo, trace/log correlation, meaningful SLO and
+  error-budget burn rates, more service failure scenarios.
+- Phase 4: interactive reviewer journey, end-to-end evidence, stable release.
+
+See [security model](SECURITY.md) and [image source records](docs/IMAGE_SOURCES.md).
+MIT licensed. No production or zero-vulnerability claim.

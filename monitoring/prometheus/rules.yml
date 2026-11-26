@@ -1,0 +1,20 @@
+groups:
+  - name: workload-lab
+    rules:
+      - alert: WorkloadDown
+        expr: up{job="workload"} == 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: Local workload cannot be scraped
+      - alert: HighErrorRate
+        expr: |
+          (sum(rate(obs_http_requests_total{status="5xx"}[1m]))
+           / clamp_min(sum(rate(obs_http_requests_total[1m])), 0.001)) > 0.10
+          and sum(increase(obs_http_requests_total[1m])) >= 5
+        for: 10s
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 10 percent of workload requests fail

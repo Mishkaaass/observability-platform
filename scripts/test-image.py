@@ -32,6 +32,10 @@ request=urllib.request.Request(base+'/api/validate', data=b'{"message":"smoke"}'
                                headers={'Content-Type':'application/json'})
 with urllib.request.urlopen(request, timeout=5) as response:
     assert json.load(response)=={'accepted': True, 'length': 5}
+with urllib.request.urlopen(base+'/metrics', timeout=5) as response:
+    metrics=response.read().decode()
+    assert 'obs_http_requests_total' in metrics
+    assert 'obs_http_request_duration_seconds_bucket' in metrics
 print(json.dumps(get('/openapi.json')))
 """
 

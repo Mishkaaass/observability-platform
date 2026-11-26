@@ -1,0 +1,43 @@
+rule_files:
+  - rules.yml
+evaluation_interval: 5s
+tests:
+  - name: down-only-after-hold-time
+    interval: 5s
+    input_series:
+      - series: 'up{job="workload",instance="starter:8000"}'
+        values: '1 0 0 0 0 1 1'
+    alert_rule_test:
+      - eval_time: 10s
+        alertname: WorkloadDown
+        exp_alerts: []
+      - eval_time: 15s
+        alertname: WorkloadDown
+        exp_alerts:
+          - exp_labels:
+              job: workload
+              instance: starter:8000
+              severity: critical
+            exp_annotations:
+              summary: Local workload cannot be scraped
+      - eval_time: 30s
+        alertname: WorkloadDown
+        exp_alerts: []
+  - name: sustained-high-error-rate
+    interval: 5s
+    input_series:
+      - series: 'obs_http_requests_total{route="/lab/fail",status="5xx"}'
+        values: '0+5x20'
+      - series: 'obs_http_requests_total{route="/api/status",status="2xx"}'
+        values: '0+5x20'
+    alert_rule_test:
+      - eval_time: 5s
+        alertname: HighErrorRate
+        exp_alerts: []
+      - eval_time: 60s
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: More than 10 percent of workload requests fail

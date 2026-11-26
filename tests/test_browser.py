@@ -39,7 +39,7 @@ def test_browser_headers_and_cross_origin():
                     page = browser.new_page()
                     response = page.goto(f"http://127.0.0.1:{port}/")
                     assert response is not None and response.status == 200
-                    expect(page.get_by_role("heading")).to_have_text("Starter ready")
+                    expect(page.get_by_role("heading")).to_have_text("Observability Platform ready")
                     assert response.headers["x-frame-options"] == "DENY"
                     csp = response.headers["content-security-policy"]
                     assert "default-src 'none'" in csp

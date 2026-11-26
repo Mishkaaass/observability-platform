@@ -1,18 +1,24 @@
-# Windows quickstart
+# Windows — Docker Desktop (Linux containers)
 
-Use Python 3.14 from python.org and Git for Windows, in PowerShell from the
-cloned repository:
+Install and start Docker Desktop on a supported Windows PC, using its WSL 2
+backend and Linux containers. Install Git and Python 3.11+ for PowerShell, or use
+Ubuntu WSL 2 with Docker Desktop integration enabled. Do not install a second
+Docker daemon into WSL. Follow Microsoft's WSL installation guide if necessary:
+https://learn.microsoft.com/en-us/windows/wsl/install.
+
+In PowerShell in the repository root:
 
 ```powershell
-py -3.14 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m pytest
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 18000
+docker context show
+docker compose version
+docker compose config --quiet
+docker compose up -d --build
+py -3 scripts/integration-observability.py healthy
+py -3 scripts/generate_traffic.py healthy --count 30
 ```
 
-Open http://127.0.0.1:18000/. Stop with Ctrl+C. No global execution-policy
-change is required. For container use, install Docker Desktop and enable
-Linux containers. In PowerShell, `docker compose up --build` is an alternative.
-For Bash tools and Linux-specific integrations use Ubuntu WSL 2; do not
-install a second Docker daemon inside an integrated WSL environment. The
-CI reference runtime is Linux; native Windows and each CPU are not yet tested.
+If using Ubuntu WSL 2 instead, run the Linux commands with `python3`. Open
+http://127.0.0.1:13000/d/observability-overview in the Windows browser. The
+[README](../README.md) describes the outage drill. Use `docker compose stop`
+to preserve the stack. No native Windows containers or public forwarding are
+required. Full Windows runtime is pending independent verification.

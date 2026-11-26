@@ -1,0 +1,222 @@
+{
+  "uid": "observability-overview",
+  "title": "Observability Lab - RED and SLI",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Service reachability",
+      "description": "1 = scrape works; 0 = unavailable. This is not user-request availability.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "workload-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"workload\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "workload-prometheus"
+          },
+          "legendFormat": "workload"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Requests per second",
+      "description": "Real instrumented workload requests, not health probes or scrapes.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "workload-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(obs_http_requests_total[1m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "workload-prometheus"
+          },
+          "legendFormat": "workload"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "5xx error percentage",
+      "description": "Missing traffic is not evidence of success.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "workload-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * sum(rate(obs_http_requests_total{status=\"5xx\"}[1m])) / sum(rate(obs_http_requests_total[1m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "workload-prometheus"
+          },
+          "legendFormat": "workload"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "p95 latency",
+      "description": "Histogram estimate of the 95th percentile in seconds.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "workload-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(obs_http_request_duration_seconds_bucket[1m])))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "workload-prometheus"
+          },
+          "legendFormat": "workload"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Request success SLI",
+      "description": "2xx / all measured workload requests over 5 minutes; no data when there is no traffic. Teaching window only.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "workload-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * sum(rate(obs_http_requests_total{status=\"2xx\"}[5m])) / sum(rate(obs_http_requests_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "workload-prometheus"
+          },
+          "legendFormat": "workload"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Firing alerts",
+      "description": "Alert rule state as seen by Prometheus. Alertmanager receipt is separate evidence.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "workload-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "workload-prometheus"
+          },
+          "legendFormat": "{{alertname}}"
+        }
+      ]
+    }
+  ],
+  "tags": [
+    "local-lab",
+    "sre"
+  ]
+}

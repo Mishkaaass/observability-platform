@@ -1,0 +1,10 @@
+route:
+  receiver: local-only
+  group_by: [alertname]
+  group_wait: 2s
+  group_interval: 10s
+  repeat_interval: 1h
+receivers:
+  - name: local-only
+# Receiver intentionally has no email, Slack or external webhook.
+# Alert receipt and resolution are verified through the local API.
