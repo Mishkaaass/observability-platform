@@ -61,8 +61,12 @@ def main():
         poll("Prometheus scrapes workload", lambda: scalar('up{job="workload"}') == 1)
         poll(
             "Grafana provisioned real dashboard",
-            lambda: get(13000, "/api/dashboards/uid/observability-overview")
-            ["dashboard"]["uid"] == "observability-overview",
+            lambda: (
+                get(13000, "/api/dashboards/uid/observability-overview")["dashboard"][
+                    "uid"
+                ]
+                == "observability-overview"
+            ),
         )
         poll("Alertmanager available", lambda: bool(get(19093, "/api/v2/status")))
     elif stage == "metrics":

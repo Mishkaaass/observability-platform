@@ -9,9 +9,12 @@ client = TestClient(app)
 
 
 def count(route, status):
-    return REGISTRY.get_sample_value(
-        "obs_http_requests_total", {"route": route, "status": status}
-    ) or 0
+    return (
+        REGISTRY.get_sample_value(
+            "obs_http_requests_total", {"route": route, "status": status}
+        )
+        or 0
+    )
 
 
 def test_metrics_and_unknown_paths():
