@@ -1,6 +1,6 @@
-# Observability Platform — Metrics and Alerting Lab
+# Observability Platform — Metrics, Alerting and Logs
 
-**Project 3 · Phase 1 foundation.** A hands-on SRE and DevSecOps lab built on the
+**Project 3 · Phases 1–2.** A hands-on SRE and DevSecOps lab built on the
 [DevSecOps Starter Template](https://github.com/Mishkaaass/devops-starter-template).
 Measure a real FastAPI workload, inspect latency and failures, observe an alert
 when the service stops, then confirm recovery. No real cloud, external alert
@@ -10,9 +10,7 @@ receiver, Kubernetes cluster or production account is needed.
 
 [![CI/CD](https://github.com/Mishkaaass/observability-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Mishkaaass/observability-platform/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/Mishkaaass/observability-platform)](LICENSE)
 
-**Status:** first implementation; local Python tests and source checks are
-separate from the real Docker/GitHub integration evidence. This is not a final
-release. Loki, Alloy, OpenTelemetry and Tempo are planned next, not installed yet.
+**Status:** Phase 1 metrics/alerting passed all seven required checks and real Docker integration in [PR #5](https://github.com/Mishkaaass/observability-platform/pull/5). Phase 2 adds real centralized logs, subject to its own CI evidence. OpenTelemetry and Tempo are planned next. This is not a final release.
 
 ## Learn by doing
 
@@ -26,7 +24,10 @@ The current Prometheus and Alertmanager references are security-scanned pinned u
 flowchart LR
   U[Bounded local traffic] --> A[FastAPI workload]
   A --> M[Request counters and latency histograms]
-  A --> L[Structured stdout logs]
+  A --> L[Sanitized JSON log file]
+  L --> C[Alloy collector]
+  C --> LK[Loki storage]
+  G -->|LogQL| LK
   P[Prometheus] -->|scrapes /metrics| A
   P --> R[Alert rules]
   R --> AM[Alertmanager]
@@ -41,6 +42,8 @@ flowchart LR
 | Prometheus | Scrapes counters and histograms every 5 seconds |
 | Grafana | Visualizes the RED signals: rate, errors, duration |
 | Alertmanager | Receives and tracks Prometheus alerts locally |
+| Alloy | Reads the dedicated rotating workload file without host privileges |
+| Loki | Stores and queries real structured events by bounded stream labels |
 | SLI | Successful workload request fraction over a short teaching window |
 | DevSecOps | Seven inherited quality/security gates, plus monitoring integration |
 
@@ -74,6 +77,7 @@ docker compose ps
 | --- | --- |
 | http://127.0.0.1:18000/ | Workload and `/health`, `/ready`, `/metrics` |
 | http://127.0.0.1:13000/d/observability-overview | Provisioned Grafana dashboard |
+| http://127.0.0.1:13000/d/observability-logs | Loki logs and HTTP 503 investigation |
 | http://127.0.0.1:19090/targets | Prometheus workload target |
 | http://127.0.0.1:19093/ | Alertmanager firing alerts |
 
@@ -140,6 +144,27 @@ Safe shutdown: `docker compose stop` preserves the project's containers and
 volumes. Do not use `down -v` on a reviewer's machine. The CI-only script creates
 and cleans up a separate uniquely named disposable project.
 
+## Drill 3 — find the request behind a metric
+
+Generate fresh local events, then verify that the complete log path works:
+
+```bash
+python3 scripts/generate_traffic.py healthy --count 12
+python3 scripts/generate_traffic.py failure --count 12
+python3 scripts/generate_traffic.py slow --count 6
+python3 scripts/integration-observability.py logs
+```
+
+Open http://127.0.0.1:13000/d/observability-logs and compare the request records with the RED dashboard. In Grafana Explore select Loki and try:
+
+```logql
+{service="workload"} | json
+{service="workload"} | json | status = 503
+{service="workload"} | json | duration_ms > 300
+```
+
+The app writes only its own sanitized JSON events to a small rotating file in a dedicated named volume. Alloy reads it read-only and forwards it to Loki; Grafana queries Loki through the internal datasource. Loki and Alloy have no host-published ports. The file has a 256 KiB rotation threshold and three backups; Loki has 24-hour retention configured, not a hard disk quota. Log delivery is best-effort in this local lab, not a production durability promise. See the learning path and security model.
+
 ## CI/CD and safety gates
 
 ```mermaid
@@ -155,9 +180,9 @@ flowchart LR
 The inherited pipeline keeps the exact seven gate names (code quality, Python
 unit tests, dependency audit, secret scan, container security, browser/API
 security and isolated API attack scan). The container gate additionally scans
-all three pinned monitoring images, checks Prometheus rules and Alertmanager
+all five pinned monitoring images, validates Loki and Alloy configuration, checks Prometheus rules and Alertmanager
 config, starts a disposable stack, proves real scrape and dashboard behavior,
-checks metric ingestion, stops the workload, verifies a delivered alert and
+checks metric ingestion and the actual log path through Alloy, Loki and Grafana, stops the workload, verifies a delivered alert and
 restores the workload. The image-publishing job remains opt-in and requires
 protected current main and successful CI. It publishes the workload image,
 not a deployment of the monitoring stack. No CI step uses a cloud credential.
@@ -171,7 +196,7 @@ while the project is unprotected or before the real tests pass.
 ## Scope and next phases
 
 - Phase 1: metrics, dashboards, local alerts, structured stdout, outage drill.
-- Phase 2: centralized logs with Loki and Alloy (without privileged Docker socket).
+- Phase 2: centralized logs with Loki and Alloy (without privileged Docker socket); verify its own CI before claiming completion.
 - Phase 3: OpenTelemetry and Tempo, trace/log correlation, meaningful SLO and
   error-budget burn rates, more service failure scenarios.
 - Phase 4: interactive reviewer journey, end-to-end evidence, stable release.

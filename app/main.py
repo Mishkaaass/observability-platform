@@ -6,6 +6,8 @@ import logging
 import os
 import sys
 import time
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -14,12 +16,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-app = FastAPI(title="Observability Platform", docs_url=None, redoc_url=None)
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", "testserver", "starter"],
-)
-
+from app.workload_logs import make_file_handler
 
 # Finite labels: never use user-provided paths, query strings or payloads.
 ROUTES = {"/api/status", "/api/validate", "/lab/slow", "/lab/fail"}
@@ -47,6 +44,30 @@ if not LOGGER.handlers:
     LOGGER.addHandler(handler)
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Fixed path in a dedicated volume, never a user-supplied file name.
+    file_handler = None
+    if os.getenv("LAB_LOG_FILE") == "1":
+        file_handler = make_file_handler()
+        LOGGER.addHandler(file_handler)
+    try:
+        yield
+    finally:
+        if file_handler is not None:
+            LOGGER.removeHandler(file_handler)
+            file_handler.close()
+
+
+app = FastAPI(
+    title="Observability Platform", docs_url=None, redoc_url=None, lifespan=lifespan
+)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["localhost", "127.0.0.1", "testserver", "starter"],
+)
+
+
 def record_workload(route: str, status: int, started: float) -> None:
     duration = time.perf_counter() - started
     group = f"{status // 100}xx"
@@ -55,6 +76,7 @@ def record_workload(route: str, status: int, started: float) -> None:
     LOGGER.info(
         json.dumps(
             {
+                "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
                 "event": "workload_request",
                 "route": route,
                 "status": status,

@@ -1,0 +1,87 @@
+{
+  "uid": "observability-logs",
+  "title": "Observability Lab - Workload Logs",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "tags": [
+    "local-lab",
+    "sre",
+    "logs"
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Workload events - structured JSON",
+      "description": "Real application events collected through Alloy and stored in Loki. Query event fields at read time.",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "workload-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"workload\"} | json",
+          "queryType": "range",
+          "datasource": {
+            "type": "loki",
+            "uid": "workload-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
+    },
+    {
+      "id": 2,
+      "title": "HTTP 503 events",
+      "description": "Correlate failures with the RED dashboard; only workload events, not synthetic Loki fixtures.",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "workload-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"workload\"} | json | status = 503",
+          "queryType": "range",
+          "datasource": {
+            "type": "loki",
+            "uid": "workload-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
+    }
+  ]
+}

@@ -1,12 +1,21 @@
 # Local teaching environment: no cloud credentials, no host socket mounts.
+x-local-logging: &local-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "2"
 services:
   starter:
     build:
       context: .
     environment:
       LAB_INCIDENTS: "1"
+      LAB_LOG_FILE: "1"
+    volumes:
+      - workload-logs:/var/log/observability
     ports:
       - "127.0.0.1:18000:8000"
+    logging: *local-logging
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -32,6 +41,7 @@ services:
     volumes:
       - ./monitoring/prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
+    logging: *local-logging
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -51,6 +61,7 @@ services:
     volumes:
       - ./monitoring/alertmanager:/etc/alertmanager:ro
       - alertmanager-data:/alertmanager
+    logging: *local-logging
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -68,7 +79,7 @@ services:
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
       GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
       GF_SECURITY_DISABLE_GRAVATAR: "true"
-      GF_SECURITY_DATA_SOURCE_PROXY_WHITELIST: "prometheus:9090"
+      GF_SECURITY_DATA_SOURCE_PROXY_WHITELIST: "prometheus:9090 loki:3100"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_USERS_ALLOW_ORG_CREATE: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
@@ -83,6 +94,7 @@ services:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/etc/grafana/lab-dashboards:ro
       - grafana-data:/var/lib/grafana
+    logging: *local-logging
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -90,7 +102,59 @@ services:
     mem_limit: 768m
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
+  loki:
+    image: grafana/loki:3.7.10@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7
+    user: "10001:10001"
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - ./monitoring/loki/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    logging: *local-logging
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 768m
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+  alloy:
+    image: grafana/alloy:v1.22.0@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189
+    user: "473:473"
+    group_add: ["10001"]
+    depends_on:
+      starter:
+        condition: service_healthy
+      loki:
+        condition: service_started
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=127.0.0.1:12345
+      - --server.http.enable-pprof=false
+      - --server.http.disable-support-bundle=true
+      - --disable-reporting
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - type: volume
+        source: workload-logs
+        target: /var/log/observability
+        read_only: true
+        volume:
+          nocopy: true
+      - alloy-data:/var/lib/alloy/data
+    logging: *local-logging
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 512m
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
 volumes:
+  workload-logs: {}
+  loki-data: {}
+  alloy-data: {}
   prometheus-data: {}
   alertmanager-data: {}
   grafana-data: {}

@@ -124,16 +124,75 @@ See [IMAGE_SOURCES.md](IMAGE_SOURCES.md) for exact evidence.
 Never confuse an upstream tag with a fixed dependency, a passed image scan
 with a tested runtime, or green CI with production certification.
 
-## 6. Next: logs, traces and SLOs
+## 6. Centralized logging: answer what happened
 
-- **Logs (Loki + Alloy):** a metric tells us something failed; logs explain
-  individual events. Use structured, sanitized logs and bounded retention,
-  without mounting the Docker socket.
+**Built:** an opt-in rotating JSON file in the app, Alloy as a read-only file
+collector, a single-node Loki store, and a provisioned Grafana log dashboard.
+
+**Why:** a metric is an aggregate. It tells you that requests failed but not
+which events correspond to the graph. Imagine a food-delivery service:
+the error graph shows an order failure spike, and a log shows the individual
+operation, timestamp, response status and duration.
+
+**Data flow:**
+
+```mermaid
+flowchart LR
+    A[FastAPI sanitized events] --> V[Dedicated rotating file]
+    V -->|read-only| C[Alloy collector]
+    C -->|internal HTTP| L[Loki]
+    G[Grafana] -->|LogQL| L
+```
+
+Alloy transports events; Loki stores and queries them. Loki indexes a small
+set of stream labels, not every JSON field. Keep labels such as service and
+environment bounded. Parse duration or status at query time; do not make
+request IDs into labels. Timestamp describes when the event happened, not
+when a collector happened to deliver it.
+
+After the phase's integration passes, run:
+
+```bash
+python3 scripts/generate_traffic.py healthy --count 12
+python3 scripts/generate_traffic.py failure --count 12
+python3 scripts/generate_traffic.py slow --count 6
+python3 scripts/integration-observability.py logs
+```
+
+Open http://127.0.0.1:13000/d/observability-logs and inspect real events.
+In Grafana Explore, choose Loki and compare:
+
+| LogQL | Meaning |
+| --- | --- |
+| `{service="workload"} \| json` | Read workload stream and parse fields |
+| `{service="workload"} \| json \| status = 503` | Locate failed requests |
+| `{service="workload"} \| json \| duration_ms > 300` | Locate slow requests |
+
+Compare the same time window on the RED dashboard. A simulated workload
+failure is a real HTTP 503 with a real event, not a fake dashboard value.
+
+**Proof:** CI must query fresh records through the actual Grafana datasource
+proxy and find healthy, failed and slow events. Unit tests additionally
+require the log schema, exclusion of request content and bounded file
+rotation. This verifies the data path, not lossless delivery under overload.
+
+**Security:** the collector only receives a read-only dedicated volume,
+not the Docker daemon or host logs. Loki is not exposed directly. The
+configured retention is a time limit, not a disk quota. The local anonymous
+viewer is not a production authentication design. See [security](../SECURITY.md).
+
+Vendor configuration references:
+- https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.file/
+- https://grafana.com/docs/loki/latest/configure/examples/configuration-examples/
+- https://grafana.com/docs/loki/latest/operations/storage/retention/
+
+## 7. Next: traces and SLOs
+
 - **Traces (OpenTelemetry + Tempo):** connect request processing across
   services by trace ID and spans to locate latency and failure.
 - **SLOs and error budgets:** set a measurable reliability target, distinguish
   no traffic from successful requests, and measure how fast errors consume
   the allowed budget.
 
-These are planned stages, not yet implemented in this revision. Each will
-receive its own source, tests, real integration evidence and practical lesson.
+These remain planned stages. Each receives its own source, tests, real
+integration evidence and practical lesson.

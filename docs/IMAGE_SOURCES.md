@@ -1,4 +1,4 @@
-# Reviewed image references — Phase 1
+# Reviewed image references — Metrics and Logs
 
 The exact references in compose.yaml are selected by immutable registry digest.
 The original stable Prometheus v3.16.0, Alertmanager v0.35.1 and Grafana 13.2
@@ -43,3 +43,21 @@ Official configuration references:
 - https://prometheus.io/docs/alerting/latest/alertmanager/
 - https://grafana.com/docs/grafana/latest/setup-grafana/installation/docker/
 - https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/anonymous-auth/
+
+## Phase 2 candidates: logs
+
+| Component | Exact candidate image |
+| --- | --- |
+| Loki | `grafana/loki:3.7.10@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7` |
+| Alloy | `grafana/alloy:v1.22.0@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189` |
+
+These stable release index digests were recorded from the vendor registry:
+- https://hub.docker.com/layers/grafana/loki/3.7.10/images/sha256-a2a64cb6d64855d13a4578581de191bebce9e6722fdddaa22f0904e698d3697b
+- https://hub.docker.com/layers/grafana/alloy/v1.22.0/images/sha256-f520f92be9ec37af83df426692d578411f039b0663e0456812c8f39015af8f8f
+
+Their upstream go.mod files contain the fixed x/net version v0.62.0.
+That alone does not prove the images are safe: the five monitoring images
+must pass the actual Trivy gate before the phase is merged. Alloy's upstream
+Docker image supports a non-root user but the upstream Dockerfile calls this
+mode experimental; this lab explicitly tests it without host privileges.
+No production or ARM64 runtime verification is claimed.
