@@ -14,6 +14,12 @@ receiver, Kubernetes cluster or production account is needed.
 separate from the real Docker/GitHub integration evidence. This is not a final
 release. Loki, Alloy, OpenTelemetry and Tempo are planned next, not installed yet.
 
+## Learn by doing
+
+Follow the [step-by-step engineering learning path](docs/LEARNING_PATH.md): what each component does, why the design exists, exact commands, expected observations, and how to distinguish real evidence from a simulation. It grows with each phase.
+
+The current Prometheus and Alertmanager references are security-scanned pinned upstream development snapshots, not stable releases. See [image source records](docs/IMAGE_SOURCES.md) for the reason, evidence and migration policy.
+
 ## What happens in this lab?
 
 ```mermaid

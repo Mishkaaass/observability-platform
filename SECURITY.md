@@ -29,7 +29,7 @@ ZAP tests the sample stateless JSON API on a disposable internal-network contain
 not arbitrary endpoints or external services. Third-party monitoring images also
 undergo Trivy scans: all CRITICAL and fixable HIGH findings block; unfixed HIGH
 findings are reported and require review. Scanner errors block. A green check
-proves only the stated policy, not absence of vulnerabilities. Dependabot proposes
+proves only the stated policy, not absence of vulnerabilities. The current Prometheus and Alertmanager images are digest-pinned upstream development snapshots chosen because the stable versions failed the gate. This is a documented temporary lab choice, not a production approval; see [image review](docs/IMAGE_SOURCES.md). Dependabot proposes
 updates; each must be reviewed. No unverified or skipped gate enables CD.
 
 The CD job publishes only a candidate workload image, scans/smokes the exact

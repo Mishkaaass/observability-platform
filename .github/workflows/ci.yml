@@ -95,27 +95,6 @@ jobs:
             fi
           done <<< "$images"
           test "$failed" -eq 0
-      - name: Diagnose upstream patch candidates (scan only; never execute)
-        if: failure()
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          # Temporary PR diagnostic. These discovery tags are never used by the lab.
-          # Resolve to immutable registry digests before pulling/scanning.
-          for ref in prom/prometheus:main prom/alertmanager:main grafana/grafana:13.2.7-slim; do
-            if digest="$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}')" &&
-              [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-              image="$ref@$digest"
-              echo "PATCH_CANDIDATE=$image"
-              if docker pull "$image" && sh scripts/scan-image.sh "$image"; then
-                echo "PATCH_CANDIDATE_SCAN_PASS=$image"
-              else
-                echo "PATCH_CANDIDATE_SCAN_FAIL=$image"
-              fi
-            else
-              echo "PATCH_CANDIDATE_UNRESOLVED=$ref"
-            fi
-          done
       - name: Real monitoring integration, failure and recovery
         run: bash scripts/ci-observability.sh
   browser:
