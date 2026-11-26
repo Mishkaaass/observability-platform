@@ -17,6 +17,9 @@ RUN python -m pip install --no-cache-dir -r requirements.txt \
     && python -m pip check \
     && python -m pip uninstall --yes pip
 COPY app ./app
+# Copy-up into a dedicated named volume: owner writes, collector group reads.
+RUN install -d -m 0750 -o 10001 -g 10001 /var/log/observability \
+    && install -m 0640 -o 10001 -g 10001 /dev/null /var/log/observability/workload.jsonl
 USER 10001:10001
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header", "--no-access-log", "--no-proxy-headers"]

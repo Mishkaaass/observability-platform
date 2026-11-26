@@ -1,0 +1,28 @@
+// Collect only the dedicated workload file, not the host or Docker socket.
+loki.source.file "workload" {
+  targets = [
+    {"__path__" = "/var/log/observability/workload.jsonl", "service" = "workload", "environment" = "local-lab"},
+  ]
+  forward_to = [loki.process.workload.receiver]
+}
+
+loki.process "workload" {
+  stage.json {
+    expressions = {"timestamp" = "timestamp"}
+  }
+
+  stage.timestamp {
+    source            = "timestamp"
+    format            = "RFC3339Nano"
+    action_on_failure = "skip"
+  }
+
+  // The original JSON line is retained. IDs and payloads never become labels.
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

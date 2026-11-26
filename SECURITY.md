@@ -21,6 +21,24 @@ with access to the lab's host loopback can inspect or interact with them. Do not
 forward ports to other machines. There is no external alert integration. The local
 viewer is not a privilege boundary against administrators of the host or Docker.
 
+## Centralized log boundary
+
+Only the app can write its dedicated workload log volume. Alloy runs non-root
+with the app's read group and a read-only mount; it has no Docker socket, host
+log directory or credentials. The collector forwards to a single internal Loki
+endpoint. Both services have no published host ports. Only approved internal
+datasource destinations are in Grafana's proxy allowlist. The entire stack is
+a trusted local educational environment, not a multi-tenant access boundary.
+
+Log fields are fixed, with event timestamps in UTC. Raw request bodies,
+query parameters, user identifiers and authentication headers are never added
+to workload logs. Only bounded static labels are indexed. The app enables
+file logging only in lab Compose and rotates at 256 KiB with three backups.
+Docker's local logging driver has a separate 10 MB/two-file policy per service.
+Loki's configured 24h retention and ingestion limits do not guarantee an
+absolute disk bound, and file rotation or a collector outage can lose events.
+Do not use this lab for sensitive or production logs.
+
 ## CI/CD
 
 SHA-pinned actions, read-only CI permissions, Gitleaks, pip-audit, Ruff, Bandit,

@@ -86,7 +86,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           images="$(docker compose config --images | grep '@sha256:')"
-          test "$(printf '%s\n' "$images" | wc -l)" = 3
+          test "$(printf '%s\n' "$images" | wc -l)" = 5
           failed=0
           while IFS= read -r image; do
             echo "Checking exact image: $image"

@@ -10,12 +10,15 @@ docker compose config --quiet
 docker compose run --rm --no-deps --entrypoint /bin/promtool prometheus check config /etc/prometheus/prometheus.yml
 docker compose run --rm --no-deps --entrypoint /bin/promtool prometheus test rules /etc/prometheus/rules-test.yml
 docker compose run --rm --no-deps --entrypoint /bin/amtool alertmanager check-config /etc/alertmanager/alertmanager.yml
+docker compose run --rm --no-deps loki -config.file=/etc/loki/local-config.yaml -verify-config=true
+docker compose run --rm --no-deps alloy validate /etc/alloy/config.alloy
 docker compose up -d --build
 python3 scripts/integration-observability.py healthy
 python3 scripts/generate_traffic.py healthy --count 12
 python3 scripts/generate_traffic.py failure --count 12
 python3 scripts/generate_traffic.py slow --count 6
 python3 scripts/integration-observability.py metrics
+python3 scripts/integration-observability.py logs
 docker compose stop starter
 python3 scripts/integration-observability.py down
 docker compose start starter
