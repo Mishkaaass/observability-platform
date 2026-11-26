@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.token
+*.tfstate*
+.terraform/
+*.tfplan
+artifacts/
+reports/
+.DS_Store

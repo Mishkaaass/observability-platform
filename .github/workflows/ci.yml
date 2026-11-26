@@ -1,0 +1,189 @@
+name: CI / CD
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  quality:
+    name: Code quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: ruff check . && ruff format --check .
+      - run: bandit -r app scripts -ll -ii
+  tests:
+    name: Python tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -v
+      - run: bash -n scripts/setup-trivy.sh && sh -n scripts/scan-image.sh
+  dependencies:
+    name: Dependency security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: pip-audit -r requirements.txt
+  secrets:
+    name: Secret security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+  containers:
+    name: Container security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: bash scripts/setup-trivy.sh
+      - run: trivy config --severity HIGH,CRITICAL --exit-code 1 .
+      - run: docker build --build-arg "GIT_SHA=$GITHUB_SHA" -t starter:ci .
+      - run: sh scripts/scan-image.sh starter:ci
+      - run: python3 scripts/test-image.py starter:ci "$GITHUB_SHA"
+  browser:
+    name: API and browser security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -r requirements-browser.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pytest -v tests/test_service.py tests/test_browser.py
+        env:
+          RUN_BROWSER_SECURITY: '1'
+  active:
+    name: Isolated API attack scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: docker build --build-arg "GIT_SHA=$GITHUB_SHA" -t starter:security .
+      - run: python3 scripts/test-image.py starter:security "$GITHUB_SHA" --zap
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: security-ci-${{ github.run_attempt }}
+          path: artifacts/security/zap-summary.json
+          if-no-files-found: ignore
+          retention-days: 7
+  publish:
+    name: Publish Docker image
+    # No untrusted pull_request code receives write credentials. No deployment.
+    needs: [quality, tests, dependencies, secrets, containers, browser, active]
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+           (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+           vars.PUBLISH_IMAGE == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Verify main and repository protection before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.protected')" = true
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
+      - name: Image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - name: Publish unpromoted candidate with SBOM and provenance
+        id: candidate
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          push: true
+          sbom: true
+          provenance: mode=max
+          build-args: GIT_SHA=${{ github.sha }}
+          tags: ${{ steps.image.outputs.name }}:candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+      - run: bash scripts/setup-trivy.sh
+      - name: Scan and test exact published digest
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}@${{ steps.candidate.outputs.digest }}
+        run: |
+          set -Eeuo pipefail
+          sh scripts/scan-image.sh "$IMAGE"
+          python3 scripts/test-image.py "$IMAGE" "$GITHUB_SHA" --zap
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: security-release-${{ github.run_attempt }}
+          path: artifacts/security/zap-summary.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Promote only verified current main digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ steps.image.outputs.name }}@${{ steps.candidate.outputs.digest }}
+          NAME: ${{ steps.image.outputs.name }}
+        run: |
+          set -Eeuo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
+          docker buildx imagetools create --prefer-index=false --tag "$NAME:sha-$GITHUB_SHA" "$IMAGE"
+          actual="$(docker buildx imagetools inspect "$NAME:sha-$GITHUB_SHA" --format '{{.Manifest.Digest}}')"
+          test "$actual" = "${IMAGE##*@}"
+          printf 'Verified image: `%s`\nCommit: `%s`\n' "$IMAGE" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
