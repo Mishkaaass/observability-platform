@@ -112,10 +112,10 @@ def main():
     elif stage == "logs":
         poll(
             "Grafana provisioned the Loki dashboard",
-            lambda: get(13000, "/api/dashboards/uid/observability-logs")["dashboard"][
-                "uid"
-            ]
-            == "observability-logs",
+            lambda: (
+                get(13000, "/api/dashboards/uid/observability-logs")["dashboard"]["uid"]
+                == "observability-logs"
+            ),
         )
         poll(
             "Real HTTP 200 log reached Loki through Alloy and Grafana",

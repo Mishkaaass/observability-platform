@@ -164,9 +164,9 @@ In Grafana Explore, choose Loki and compare:
 
 | LogQL | Meaning |
 | --- | --- |
-| `{service="workload"} | json` | Read workload stream and parse fields |
-| `{service="workload"} | json | status = 503` | Locate failed requests |
-| `{service="workload"} | json | duration_ms > 300` | Locate slow requests |
+| `{service="workload"} \| json` | Read workload stream and parse fields |
+| `{service="workload"} \| json \| status = 503` | Locate failed requests |
+| `{service="workload"} \| json \| duration_ms > 300` | Locate slow requests |
 
 Compare the same time window on the RED dashboard. A simulated workload
 failure is a real HTTP 503 with a real event, not a fake dashboard value.
