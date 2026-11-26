@@ -1,29 +1,44 @@
 # Security model
 
-This is a starter lab, not a production security certification. Never expose
-its sample HTTP server to the internet. Report suspected vulnerabilities
-privately to the repository owner using GitHub's private reporting mechanism
-if enabled; do not include credentials, customer data or raw scan traffic.
+This is a disposable, single-machine education lab. Never point it at company or
+production endpoints. The API is stateless and intentionally small; the published
+image has the simulated incidents disabled unless explicitly enabled. The traffic
+script has a fixed localhost target, capped request count, sequential requests and
+bounded timeout. Metrics labels are a finite route/status set; structured workload
+logs do not contain request bodies, query strings, auth headers or credentials.
 
-- Loopback-only local service; non-root container, read-only filesystem, no
-  Docker socket, no cloud credentials, no host mounts in the application.
-- Pull request CI uses read permissions. Publishing is opt-in, only after all
-  required jobs pass on main. The published candidate is scanned and exercised
-  by exact digest before receiving a verified `sha-...` tag. Failed candidate
-  tags can remain in GHCR and must not be deployed. A tag can be mutable; deploy
-  by the recorded digest, not a tag.
-- Trivy blocks all CRITICAL findings and fixable HIGH findings. Unfixed HIGH
-  findings are reported and require explicit review; scanner errors block CI.
-- Action and base-image digests use the reviewed OpsBoard baseline. Top-level
-  Python versions are pinned; transitive dependencies and apt security updates
-  are not a full reproducible lock. Review new findings and dependency updates.
-- ZAP scans a new disposable container in a private internal Docker network;
-  never give it a production URL. The stateless JSON sample has no cookie auth
-  or persistent mutations. The anti-CSRF exception is limited to that sample;
-  remove it and implement real role/CSRF tests when introducing credentials.
-- Only sanitized finding IDs, risk codes and coverage counts are uploaded.
-- Rulesets require PRs, seven named checks from GitHub Actions, up-to-date main,
-  no force pushes/deletion and no bypass. Zero human approvals are configured
-  for a solo portfolio; require human review for a real team.
-- CD does not deploy to AWS or Kubernetes. GHCR package visibility is a
-  separate GitHub setting. No custom repository secrets are needed.
+The Docker images are digest-pinned to reviewed registry references. All exposed
+ports bind to 127.0.0.1. There are no host Docker socket mounts, privileged
+containers, host networks, or cloud credentials. The app and monitoring containers
+run with dropped capabilities, non-root users, read-only root filesystems and
+bounded memory/process counts. Named data volumes persist until explicitly removed.
+This is not an air gap: Docker's local bridge can permit outbound access. Never
+mount production data or connect the stack to a production network.
+
+Grafana is a local anonymous Viewer, not an authenticated public dashboard. The
+Prometheus/Alertmanager web APIs are local and not authentication-hardened; anyone
+with access to the lab's host loopback can inspect or interact with them. Do not
+forward ports to other machines. There is no external alert integration. The local
+viewer is not a privilege boundary against administrators of the host or Docker.
+
+## CI/CD
+
+SHA-pinned actions, read-only CI permissions, Gitleaks, pip-audit, Ruff, Bandit,
+Trivy, browser testing and isolated ZAP scans are inherited from the template.
+ZAP tests the sample stateless JSON API on a disposable internal-network container,
+not arbitrary endpoints or external services. Third-party monitoring images also
+undergo Trivy scans: all CRITICAL and fixable HIGH findings block; unfixed HIGH
+findings are reported and require review. Scanner errors block. A green check
+proves only the stated policy, not absence of vulnerabilities. The current Prometheus and Alertmanager images are digest-pinned upstream development snapshots chosen because the stable versions failed the gate. This is a documented temporary lab choice, not a production approval; see [image review](docs/IMAGE_SOURCES.md). Dependabot proposes
+updates; each must be reviewed. No unverified or skipped gate enables CD.
+
+The CD job publishes only a candidate workload image, scans/smokes the exact
+registry digest with the same policy, verifies current protected main, then tags
+the approved digest. Buildx SBOM/provenance are attestations, not a signature or
+production certification. There is no automatic deployment. Each repo needs its
+own ruleset and publication opt-in; these settings are not inherited by copying
+Git files.
+
+No public release until real CI/CD and local demo evidence have been reviewed.
+Report vulnerabilities privately to the repository owner; do not post credentials
+or raw sensitive logs in issues.

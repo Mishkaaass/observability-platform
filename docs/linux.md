@@ -1,16 +1,21 @@
-# Linux quickstart
+# Linux — local observability lab
 
-Install Git and Python 3.14 with venv from a trusted source. Use a non-root
-user. From the cloned project:
+Install Git, Python 3.11+ and Docker Engine with Compose v2 from trusted sources.
+For an Ubuntu/Debian system, Git and Python are available from the normal package
+manager; install Docker using https://docs.docker.com/engine/install/. Use a
+non-root user with authorized access to a dedicated local Docker daemon. Docker
+daemon access is a privileged capability; never chmod the Docker socket to 666.
+
+In the repository root:
 
 ```bash
-python3.14 -m venv .venv
-.venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m pytest
-.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 18000
+docker context show
+docker compose version
+docker compose config --quiet
+docker compose up -d --build
+python3 scripts/integration-observability.py healthy
 ```
 
-Open http://127.0.0.1:18000/. Stop with Ctrl+C. Never use sudo pip or replace
-system Python. Alternatively install Docker Engine / Compose v2 from the
-official vendor, then run `docker compose up --build` on a trusted local
-Docker daemon. Use one route at a time. No AWS account is needed.
+Open http://127.0.0.1:13000/d/observability-overview in a local browser. See the
+[README](../README.md) for traffic and outage drills. Stop using `docker compose
+stop` to preserve data. No host pip packages are required to generate traffic.

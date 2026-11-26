@@ -71,7 +71,7 @@ jobs:
   containers:
     name: Container security
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -81,6 +81,22 @@ jobs:
       - run: docker build --build-arg "GIT_SHA=$GITHUB_SHA" -t starter:ci .
       - run: sh scripts/scan-image.sh starter:ci
       - run: python3 scripts/test-image.py starter:ci "$GITHUB_SHA"
+      - name: Scan each pinned monitoring image (same release policy)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          images="$(docker compose config --images | grep '@sha256:')"
+          test "$(printf '%s\n' "$images" | wc -l)" = 3
+          failed=0
+          while IFS= read -r image; do
+            echo "Checking exact image: $image"
+            if ! docker pull "$image" || ! sh scripts/scan-image.sh "$image"; then
+              failed=1
+            fi
+          done <<< "$images"
+          test "$failed" -eq 0
+      - name: Real monitoring integration, failure and recovery
+        run: bash scripts/ci-observability.sh
   browser:
     name: API and browser security
     runs-on: ubuntu-24.04

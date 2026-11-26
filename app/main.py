@@ -1,23 +1,81 @@
-"""Small, intentionally stateless reference service for the CI/CD contract."""
+"""Instrumented, stateless service for the local observability lab."""
 
+import asyncio
+import json
+import logging
 import os
+import sys
+import time
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-app = FastAPI(title="DevSecOps starter", docs_url=None, redoc_url=None)
+app = FastAPI(title="Observability Platform", docs_url=None, redoc_url=None)
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=["localhost", "127.0.0.1", "testserver", "starter"],
 )
 
 
+# Finite labels: never use user-provided paths, query strings or payloads.
+ROUTES = {"/api/status", "/api/validate", "/lab/slow", "/lab/fail"}
+REQUESTS = Counter(
+    "obs_http_requests_total", "Completed workload requests", ["route", "status"]
+)
+DURATION = Histogram(
+    "obs_http_request_duration_seconds",
+    "Workload request duration",
+    ["route"],
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5),
+)
+# Preinitialize only known series: healthy zero-error traffic is distinguishable
+# from a scrape with no workload traffic, without unbounded label cardinality.
+for route in sorted(ROUTES):
+    for status in ("2xx", "4xx", "5xx"):
+        REQUESTS.labels(route=route, status=status)
+    DURATION.labels(route=route)
+LOGGER = logging.getLogger("observability.workload")
+LOGGER.setLevel(logging.INFO)
+LOGGER.propagate = False
+if not LOGGER.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    LOGGER.addHandler(handler)
+
+
+def record_workload(route: str, status: int, started: float) -> None:
+    duration = time.perf_counter() - started
+    group = f"{status // 100}xx"
+    REQUESTS.labels(route=route, status=group).inc()
+    DURATION.labels(route=route).observe(duration)
+    LOGGER.info(
+        json.dumps(
+            {
+                "event": "workload_request",
+                "route": route,
+                "status": status,
+                "duration_ms": round(duration * 1000, 3),
+            }
+        )
+    )
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    response = await call_next(request)
+    route = request.url.path
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        if route in ROUTES:
+            record_workload(route, 500, started)
+        raise
+    if route in ROUTES:
+        record_workload(route, response.status_code, started)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -41,8 +99,8 @@ class Message(BaseModel):
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def home():
     return (
-        "<!doctype html><html lang='en'><title>Starter</title>"
-        "<h1>Starter ready</h1></html>"
+        "<!doctype html><html lang='en'><title>Observability Platform</title>"
+        "<h1>Observability Platform ready</h1></html>"
     )
 
 
@@ -70,3 +128,24 @@ async def status():
 async def validate(payload: Message):
     # JSON only; no persistent mutation, shell invocation or external calls.
     return {"accepted": True, "length": len(payload.message)}
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics():
+    return Response(generate_latest(), headers={"Content-Type": CONTENT_TYPE_LATEST})
+
+
+@app.get("/lab/slow", include_in_schema=False)
+async def slow():
+    # No global state, arbitrary target, or unbounded delay.
+    if os.getenv("LAB_INCIDENTS") != "1":
+        return JSONResponse({"detail": "not found"}, status_code=404)
+    await asyncio.sleep(0.35)
+    return {"status": "simulated latency"}
+
+
+@app.get("/lab/fail", include_in_schema=False)
+async def fail():
+    if os.getenv("LAB_INCIDENTS") != "1":
+        return JSONResponse({"detail": "not found"}, status_code=404)
+    return JSONResponse({"status": "simulated failure"}, status_code=503)
